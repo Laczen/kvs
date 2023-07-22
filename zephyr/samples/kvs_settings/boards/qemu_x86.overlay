@@ -7,7 +7,7 @@
         kvs_storage: kvs_storage {
                 compatible = "zephyr,kvs-flash";
                 partition = <&storage_partition>;
-                sector-size = <4096>;
+                block-size = <4096>;
                 free-size = <16384>;
         };
  };

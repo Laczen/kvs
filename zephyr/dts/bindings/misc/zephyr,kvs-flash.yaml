@@ -14,12 +14,12 @@ properties:
     description: |
       Backing storage flash partition.
 
-  sector-size:
+  block-size:
     type: int
     required: true
     description: |
-      The sector-size specifies how to divide the flash partition into sectors.
-      The sector-size should be a power of 2.
+      The block-size specifies how to divide the flash partition into blocks.
+      The block-size should be a power of 2.
 
   free-size:
     type: int
@@ -27,4 +27,4 @@ properties:
       To ensure no data is lost during garbage collection some area should 
       always be free. As flash needs to be erased before being written this size
       should at least be equal to the largest erase block size of the flash
-      partition. Defaults to sector-size if omitted
+      partition. Defaults to block-size if omitted

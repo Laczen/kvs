@@ -196,28 +196,28 @@ static int kvs_flash_be_release(const void *ctx)
 #define KVS_DEV(inst) DEVICE_DT_GET(KVS_MTD(inst))
 #define KVS_SIZE(inst) DT_REG_SIZE(KVS_PART(inst))
 #define KVS_OFF(inst) DT_REG_ADDR(KVS_PART(inst))
-#define KVS_SSIZE(inst) DT_PROP(inst, sector_size)
+#define KVS_BLSIZE(inst) DT_PROP(inst, block_size)
 #define KVS_FSIZE(inst)                                                        \
         COND_CODE_1(DT_NODE_HAS_PROP(inst, free_size),                         \
-                    (DT_PROP(inst, free_size)), (DT_PROP(inst, sector_size)))
-#define KVS_BCNT(inst) KVS_SIZE(inst)/KVS_SSIZE(inst)
-#define KVS_FBCNT(inst) KVS_FSIZE(inst)/KVS_SSIZE(inst)
+                    (DT_PROP(inst, free_size)), (DT_PROP(inst, block_size)))
+#define KVS_BCNT(inst) KVS_SIZE(inst)/KVS_BLSIZE(inst)
+#define KVS_FBCNT(inst) KVS_FSIZE(inst)/KVS_BLSIZE(inst)
 #define KVS_PBUFSIZE(inst)                                                     \
         COND_CODE_1(DT_NODE_HAS_PROP(KVS_FLASHCTRL(inst), write_block_size),   \
                     (DT_PROP(KVS_FLASHCTRL(inst), write_block_size)), (8))
 
-#define KVS_CHECK_SSIZE(inst)                                                  \
-        BUILD_ASSERT((KVS_SSIZE(inst) & (KVS_SSIZE(inst) - 1)) == 0,           \
-                     "Sector size not a power of 2")
+#define KVS_CHECK_BLSIZE(inst)                                                  \
+        BUILD_ASSERT((KVS_BLSIZE(inst) & (KVS_BLSIZE(inst) - 1)) == 0,           \
+                     "Block size not a power of 2")
 #define KVS_CHECK_SCNT(inst)                                                   \
-        BUILD_ASSERT((KVS_SIZE(inst) % KVS_SSIZE(inst)) == 0,                  \
-                     "Partition size not a multiple of sector size")
+        BUILD_ASSERT((KVS_SIZE(inst) % KVS_BLSIZE(inst)) == 0,                  \
+                     "Partition size not a multiple of block size")
 #define KVS_CHECK_FSCNT(inst)                                                  \
-        BUILD_ASSERT((KVS_FSIZE(inst) % KVS_SSIZE(inst)) == 0,                 \
-                     "Free size not a multiple of sector size")
+        BUILD_ASSERT((KVS_FSIZE(inst) % KVS_BLSIZE(inst)) == 0,                 \
+                     "Free size not a multiple of block size")
 
 #define KVS_FLASH_DEFINE(inst)                                                 \
-        KVS_CHECK_SSIZE(inst);                                                 \
+        KVS_CHECK_BLSIZE(inst);                                                 \
         KVS_CHECK_SCNT(inst);                                                  \
         KVS_CHECK_FSCNT(inst);                                                 \
         struct kvs_flash_be kvs_flash_be_##inst = {                            \
@@ -225,12 +225,12 @@ static int kvs_flash_be_release(const void *ctx)
                 .floff = KVS_OFF(inst),                                        \
                 .flsize = KVS_SIZE(inst),                                      \
                 .flfree = KVS_FSIZE(inst),                                     \
-                .blsize = KVS_SSIZE(inst),                                     \
+                .blsize = KVS_BLSIZE(inst),                                     \
         };                                                                     \
         uint8_t kvs_flash_be_pbuf_##inst[KVS_PBUFSIZE(inst)];                  \
         const char kvs_flash_cookie_##inst[] = "Zephyr-KVS";                   \
         DEFINE_KVS(                                                            \
-                inst, &kvs_flash_be_##inst, KVS_SSIZE(inst), KVS_BCNT(inst),   \
+                inst, &kvs_flash_be_##inst, KVS_BLSIZE(inst), KVS_BCNT(inst),   \
                 KVS_FBCNT(inst), (void *)&kvs_flash_be_pbuf_##inst,            \
                 KVS_PBUFSIZE(inst), kvs_flash_be_read, kvs_flash_be_prog,      \
                 kvs_flash_be_comp, kvs_flash_be_sync, kvs_flash_be_init,       \
