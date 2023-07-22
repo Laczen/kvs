@@ -22,6 +22,9 @@ zephyr_include_directories(
 zephyr_library_sources(
     ${KVS_DIR}/src/kvs.c
 )
-add_subdirectory(subsys)
+
+add_subdirectory(subsys/kvs)
 
 endif()
+
+add_subdirectory_ifdef(CONFIG_SETTINGS_KVS subsys/settings)

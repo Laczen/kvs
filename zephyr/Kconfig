@@ -12,10 +12,19 @@ config KVS
 
 if KVS
 
-module = KVS
-module-str = kvs
-source "subsys/logging/Kconfig.template.log_config"
-
 rsource "subsys/kvs/Kconfig"
 
 endif # KVS
+
+config SETTINGS_KVS
+	bool "Settings on KVS"
+        depends on SETTINGS
+	select KVS
+	help
+	  Use KVS as the settings backend.
+
+if SETTINGS_KVS
+
+rsource "subsys/settings/Kconfig"
+
+endif # SETTINGS_KVS

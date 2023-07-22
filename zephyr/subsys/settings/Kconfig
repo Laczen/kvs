@@ -1,0 +1,10 @@
+# Copyright (c) 2023 Laczen
+# SPDX-License-Identifier: Apache-2.0
+
+if SETTINGS_KVS
+
+module = SETTINGS_KVS
+module-str = settings_kvs
+source "subsys/logging/Kconfig.template.log_config"
+
+endif
