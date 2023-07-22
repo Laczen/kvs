@@ -14,28 +14,24 @@ properties:
     description: |
       Backing storage eeprom.
   
-  "#address-cells":
-    const: 1
-
-  "#size-cells":
-    const: 1
-
-  reg:
-    type: array
+  eeprom-offset:
+    type: int
+    default: 0
     description: |
-      The reg property specifies the address range of the eeprom to use when
-      only a part of the eeprom is to be used for kvs storage.
+      When only a part of the eeprom is to be used for kvs storage the offset in
+      the eeprom can be specified here.
 
-  sector-size:
+  size:
+    type: int
+    description: |
+      When only a part of the eeprom is to be used for kvs storage the size can
+      be specified here. When unspecified the size is from eeprom-offset to the
+      end of the eeprom.
+
+  block-size:
     type: int
     required: true
     description: |
-      The sector-size specifies how to divide the eeprom into sectors. The 
-      sector-size should be a power of 2.
-  
-  free-size:
-    type: int
-    description: |
-      To ensure no data is lost during garbage collection some area should 
-      always be free. This defaults to sector-size if omitted.
+      The block-size specifies how to divide the eeprom into blocks. The 
+      block-size should be a power of 2.
 
