@@ -340,7 +340,7 @@ int kvs_entry_get(struct kvs_ent *ent, const struct kvs *kvs, const char *key);
  * @brief read data from a entry in the kvs at offset
  *
  * @param[in] ent pointer to the entry
- * @param[in] off offset from entry start
+ * @param[in] off offset from entry key start
  * @param[out] data
  * @param[in] len bytes to read
  *
