@@ -15,81 +15,81 @@
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(kvs_backend_flash);
 
-struct kvs_flash_be {
-        const struct device *const fldev;
-        const off_t floff;
-        const size_t flsize;
-        const size_t flfree;
+struct kvs_be_flash {
+        const struct device *const dev;
+        const off_t off;
+        const size_t size;
+        const size_t free;
         const size_t blsize;
         struct k_sem sem;
 };
 
-static int kvs_flash_be_read(const void *ctx, uint32_t off, void *data,
+static int kvs_be_flash_read(const void *ctx, uint32_t off, void *data,
                              size_t len)
 {
-        const struct kvs_flash_be *fbe = (const struct kvs_flash_be *)ctx;
-        const uint32_t floff = fbe->floff + off;
+        const struct kvs_be_flash *be = (const struct kvs_be_flash *)ctx;
+        const uint32_t rdoff = be->off + off;
         int rc;
 
-        if ((off + len) > fbe->flsize) {
+        if ((off + len) > be->size) {
                 LOG_ERR("read out of bounds [%x - %d]", off, len);
                 rc = -EINVAL;
                 goto end;
         }
 
-        rc = flash_read(fbe->fldev, floff, data, len);
+        rc = flash_read(be->dev, rdoff, data, len);
 end:
-        LOG_DBG("read %d bytes at %x [%d]", len, floff, rc);
+        LOG_DBG("read %d bytes at %x [%d]", len, rdoff, rc);
         return rc;
 }
 
-static int kvs_flash_be_prog(const void *ctx, uint32_t off, const void *data,
+static int kvs_be_flash_prog(const void *ctx, uint32_t off, const void *data,
                              size_t len)
 {
-        struct kvs_flash_be *fbe = (struct kvs_flash_be *)ctx;
-        const uint32_t floff = fbe->floff + off;
+        struct kvs_be_flash *be = (struct kvs_be_flash *)ctx;
+        const uint32_t wroff = be->off + off;
         struct flash_pages_info fp_info;
         int rc;
 
-        if ((off + len) > fbe->flsize) {
+        if ((off + len) > be->size) {
                 LOG_ERR("prog out of bounds [%x - %d]", off, len);
                 rc = -EINVAL;
                 goto end;
         }
 
-        if ((off % fbe->blsize) == 0U) {
-                rc = flash_get_page_info_by_offs(fbe->fldev, floff, &fp_info);
+        if ((off % be->blsize) == 0U) {
+                rc = flash_get_page_info_by_offs(be->dev, wroff, &fp_info);
                 if (rc) {
                         LOG_ERR("failed to get page info");
                         goto end;
                 }
 
-                if (fp_info.start_offset == floff) {
-                        size_t esize = MAX(fp_info.size, fbe->blsize);
-                        rc = flash_erase(fbe->fldev, floff, esize);
+                if (fp_info.start_offset == wroff) {
+                        size_t esize = MAX(fp_info.size, be->blsize);
+                        rc = flash_erase(be->dev, wroff, esize);
                         if (rc) {
                                 LOG_ERR("failed to erase %d bytes at %x",
-                                        esize, floff);
+                                        esize, wroff);
                                 goto end;
                         }
 
-                        LOG_DBG("erased %d bytes at %x [%d]", esize, floff, rc);
+                        LOG_DBG("erased %d bytes at %x [%d]", esize, wroff, rc);
 
                 }
 
         }
 
-        rc = flash_write(fbe->fldev, floff, data, len);
+        rc = flash_write(be->dev, wroff, data, len);
 end:
-        LOG_DBG("prog %d bytes at %x [%d]", len, floff, rc);
+        LOG_DBG("prog %d bytes at %x [%d]", len, wroff, rc);
         return rc;
 }
 
-static int kvs_flash_be_comp(const void *ctx, uint32_t off, const void *data,
+static int kvs_be_flash_comp(const void *ctx, uint32_t off, const void *data,
                              size_t len)
 {
-        struct kvs_flash_be *fbe = (struct kvs_flash_be *)ctx;
-        const uint32_t floff = fbe->floff + off;
+        struct kvs_be_flash *be = (struct kvs_be_flash *)ctx;
+        const uint32_t rdoff = be->off + off;
         const uint8_t *data8 = (const uint8_t *)data;
         size_t cmplen = len;
         uint8_t buf[32];
@@ -98,7 +98,7 @@ static int kvs_flash_be_comp(const void *ctx, uint32_t off, const void *data,
         while (cmplen != 0) {
                 uint32_t rdlen = MIN(cmplen, sizeof(buf));
                 
-                rc = kvs_flash_be_read(ctx, off, buf, rdlen);
+                rc = kvs_be_flash_read(ctx, off, buf, rdlen);
                 if (rc != 0) {
                         goto end;
                 }
@@ -113,51 +113,51 @@ static int kvs_flash_be_comp(const void *ctx, uint32_t off, const void *data,
                 data8 += rdlen;
         }
 end:
-        LOG_DBG("comp %d bytes at %x [%d]", len, floff, rc);
+        LOG_DBG("comp %d bytes at %x [%d]", len, rdoff, rc);
         return rc;
 }
 
-static int kvs_flash_be_sync(const void *ctx, uint32_t off)
+static int kvs_be_flash_sync(const void *ctx, uint32_t off)
 {
         return 0;
 }
 
-static int kvs_flash_be_lock(const void *ctx)
+static int kvs_be_flash_lock(const void *ctx)
 {
-        struct kvs_flash_be *fbe = (struct kvs_flash_be *)ctx;
+        struct kvs_be_flash *be = (struct kvs_be_flash *)ctx;
 
-        k_sem_take(&fbe->sem, K_FOREVER);
+        k_sem_take(&be->sem, K_FOREVER);
         return 0;
 }
 
-static int kvs_flash_be_unlock(const void *ctx)
+static int kvs_be_flash_unlock(const void *ctx)
 {
-        struct kvs_flash_be *fbe = (struct kvs_flash_be *)ctx;
+        struct kvs_be_flash *be = (struct kvs_be_flash *)ctx;
 
-        k_sem_give(&fbe->sem);
+        k_sem_give(&be->sem);
         return 0;
 }
 
-static int kvs_flash_be_init(const void *ctx)
+static int kvs_be_flash_init(const void *ctx)
 {
-        struct kvs_flash_be *fbe = (struct kvs_flash_be *)ctx;
+        struct kvs_be_flash *be = (struct kvs_be_flash *)ctx;
         int rc = 0;
         off_t eboff = 0;
-        size_t ebmin = fbe->flsize;
+        size_t ebmin = be->size;
         size_t ebmax = 0U;
         struct flash_pages_info ebinfo;
 
-        k_sem_init(&fbe->sem, 1, 1);
-        kvs_flash_be_lock(ctx);
-        while (eboff < fbe->flsize) {
-                rc = flash_get_page_info_by_offs(fbe->fldev, fbe->floff + eboff,
+        k_sem_init(&be->sem, 1, 1);
+        kvs_be_flash_lock(ctx);
+        while (eboff < be->size) {
+                rc = flash_get_page_info_by_offs(be->dev, be->off + eboff,
                                                  &ebinfo);
                 if (rc != 0) {
                         LOG_ERR("failed to get page info");
                         goto end;
                 }
 
-                if (ebinfo.start_offset != (fbe->floff + eboff)) {
+                if (ebinfo.start_offset != (be->off + eboff)) {
                         LOG_ERR("partition is not aligned to erase-block-size");
                         rc = -EINVAL;
                         goto end;
@@ -174,18 +174,18 @@ static int kvs_flash_be_init(const void *ctx)
                 eboff += ebinfo.size;
         }
 
-        if (ebmax > fbe->flfree) {
+        if (ebmax > be->free) {
                 LOG_ERR("insufficient free space");
                 rc = -EINVAL;
         }
 
 end:
-        kvs_flash_be_unlock(ctx);
+        kvs_be_flash_unlock(ctx);
         LOG_DBG("backend init [%d]", rc);
         return rc;
 }
 
-static int kvs_flash_be_release(const void *ctx)
+static int kvs_be_flash_release(const void *ctx)
 {
         return 0;
 }
@@ -220,23 +220,23 @@ static int kvs_flash_be_release(const void *ctx)
         KVS_CHECK_BLSIZE(inst);                                                 \
         KVS_CHECK_SCNT(inst);                                                  \
         KVS_CHECK_FSCNT(inst);                                                 \
-        struct kvs_flash_be kvs_flash_be_##inst = {                            \
-                .fldev = KVS_DEV(inst),                                        \
-                .floff = KVS_OFF(inst),                                        \
-                .flsize = KVS_SIZE(inst),                                      \
-                .flfree = KVS_FSIZE(inst),                                     \
+        struct kvs_be_flash kvs_be_flash_##inst = {                            \
+                .dev = KVS_DEV(inst),                                        \
+                .off = KVS_OFF(inst),                                        \
+                .size = KVS_SIZE(inst),                                      \
+                .free = KVS_FSIZE(inst),                                     \
                 .blsize = KVS_BLSIZE(inst),                                     \
         };                                                                     \
-        uint8_t kvs_flash_be_pbuf_##inst[KVS_PBUFSIZE(inst)];                  \
-        const char kvs_flash_cookie_##inst[] = "Zephyr-KVS";                   \
+        uint8_t kvs_be_flash_pbuf_##inst[KVS_PBUFSIZE(inst)];                  \
+        const char kvs_be_flash_cookie_##inst[] = "Zephyr-KVS";                   \
         DEFINE_KVS(                                                            \
-                inst, &kvs_flash_be_##inst, KVS_BLSIZE(inst), KVS_BCNT(inst),   \
-                KVS_FBCNT(inst), (void *)&kvs_flash_be_pbuf_##inst,            \
-                KVS_PBUFSIZE(inst), kvs_flash_be_read, kvs_flash_be_prog,      \
-                kvs_flash_be_comp, kvs_flash_be_sync, kvs_flash_be_init,       \
-                kvs_flash_be_release, kvs_flash_be_lock, kvs_flash_be_unlock,  \
-                (void *)&kvs_flash_cookie_##inst,                              \
-                sizeof(kvs_flash_cookie_##inst) - 1                            \
+                inst, &kvs_be_flash_##inst, KVS_BLSIZE(inst), KVS_BCNT(inst),   \
+                KVS_FBCNT(inst), (void *)&kvs_be_flash_pbuf_##inst,            \
+                KVS_PBUFSIZE(inst), kvs_be_flash_read, kvs_be_flash_prog,      \
+                kvs_be_flash_comp, kvs_be_flash_sync, kvs_be_flash_init,       \
+                kvs_be_flash_release, kvs_be_flash_lock, kvs_be_flash_unlock,  \
+                (void *)&kvs_be_flash_cookie_##inst,                              \
+                sizeof(kvs_be_flash_cookie_##inst) - 1                            \
         );
         
 DT_FOREACH_STATUS_OKAY(zephyr_kvs_flash, KVS_FLASH_DEFINE)
