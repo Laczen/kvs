@@ -7,7 +7,7 @@
  */
 
 #include <zephyr/drivers/eeprom.h>
-#include <zephyr/devicetree.h>
+#include <zephyr/kernel.h>
 #include "kvs/kvs.h"
 
 #define LOG_LEVEL CONFIG_KVS_BACKEND_EEPROM_LOG_LEVEL
@@ -18,7 +18,7 @@ struct kvs_be_eeprom {
 	const struct device *const dev;
 	const off_t off;
 	const size_t size;
-	struct k_sem sem;
+	struct k_sem *sem;
 };
 
 static int kvs_be_eeprom_read(const void *ctx, uint32_t off, void *data,
@@ -62,7 +62,7 @@ end:
 static int kvs_be_eeprom_comp(const void *ctx, uint32_t off, const void *data,
 			      size_t len)
 {
-	const struct kvs_be_eeprom *be = (const struct kvs_eeprom_be *)ctx;
+	const struct kvs_be_eeprom *be = (const struct kvs_be_eeprom *)ctx;
 	const uint32_t rdoff = be->off + off;
 	const uint8_t *data8 = (const uint8_t *)data;
 	size_t cmplen = len;
@@ -72,7 +72,7 @@ static int kvs_be_eeprom_comp(const void *ctx, uint32_t off, const void *data,
 	while (cmplen != 0) {
 		uint32_t rdlen = MIN(cmplen, sizeof(buf));
 		
-		rc = kvs_flash_be_read(ctx, off, buf, rdlen);
+		rc = kvs_be_eeprom_read(ctx, off, buf, rdlen);
 		if (rc != 0) {
 			goto end;
 		}
@@ -91,9 +91,9 @@ end:
 	return rc;
 }
 
-static int kvs_flash_be_sync(const void *ctx, uint32_t off)
+static int kvs_be_eeprom_sync(const void *ctx, uint32_t off)
 {
-	const struct kvs_be_eeprom *be = (const struct kvs_eeprom_be *)ctx;
+	const struct kvs_be_eeprom *be = (const struct kvs_be_eeprom *)ctx;
 	const uint32_t wroff = be->off + off; 
 	const char end[4] = "\0\0\0\0";
 	int rc;
@@ -117,16 +117,23 @@ end:
 static int kvs_be_eeprom_lock(const void *ctx)
 {
 	const struct kvs_be_eeprom *be = (const struct kvs_be_eeprom *)ctx;
-
-	k_sem_take(&be->sem, K_FOREVER);
-	return 0;
+	int rc = 0;
+	
+	if (IS_ENABLED(CONFIG_MULTITHREADING)) {
+		rc = k_sem_take(be->sem, K_FOREVER);
+	}
+	
+	return rc;
 }
 
 static int kvs_be_eeprom_unlock(const void *ctx)
 {
 	const struct kvs_be_eeprom *be = (const struct kvs_be_eeprom *)ctx;
+	
+	if (IS_ENABLED(CONFIG_MULTITHREADING)) {
+		k_sem_give(be->sem);
+	}
 
-	k_sem_give(&be->sem);
 	return 0;
 }
 
@@ -135,7 +142,10 @@ static int kvs_be_eeprom_init(const void *ctx)
 	const struct kvs_be_eeprom *be = (const struct kvs_be_eeprom *)ctx;
 	int rc = 0;
 
-	k_sem_init(&fbe->sem, 1, 1);
+	if (IS_ENABLED(CONFIG_MULTITHREADING)) {
+		k_sem_init(be->sem, 1, 1);
+	}
+
 	LOG_DBG("backend init [%d]", rc);
 	return rc;
 }
@@ -146,38 +156,45 @@ static int kvs_be_eeprom_release(const void *ctx)
 }
 
 #define KVS_DEV(inst) DEVICE_DT_GET(DT_PHANDLE(inst, eeprom))
-#define KVS_DEVSIZE(inst) DT_PROP(DT_PHANDLE(inst, eeprom), size)
-#define KVS_DEVOFF(inst) DT_PROP(inst, eeprom_offset)
+#define KVS_DEVSIZE(inst) (DT_PROP(DT_PHANDLE(inst, eeprom), size))
+#define KVS_DEVOFF(inst) (DT_PROP(inst, eeprom_offset))
+#define KVS_MAXSIZE(inst) (KVS_DEVSIZE(inst) - KVS_DEVOFF(inst))
 #define KVS_SIZE(inst) COND_CODE_1(DT_NODE_HAS_PROP(inst, size),		\
-	(DT_PROP(inst, size)), (KVS_DEVSIZE(inst) - KVS_DEVOFF(inst)))
-#define KVS_BLSIZE(inst) DT_PROP(inst, block_size)
+	(DT_PROP(inst, size)), (KVS_MAXSIZE(inst)))
+#define KVS_BLSIZE(inst) (DT_PROP(inst, block_size))
 #define KVS_BCNT(inst) KVS_SIZE(inst)/KVS_BLSIZE(inst)
+#define KVS_SEM_DEFINE(inst) COND_CODE_1(CONFIG_MULTITHREADING, 		\
+	(struct k_sem kvs_eeprom_sem_##inst),())
+#define KVS_SEM_GET(inst) COND_CODE_1(CONFIG_MULTITHREADING,			\
+	(&kvs_eeprom_sem_##inst), (NULL))
 
 #define KVS_CHECK_DEVSIZE(inst)							\
-	BUILD_ASSERT((KVS_DEVOFF(inst) + KVS_SIZE(inst)) > KVS_DEVSIZE(inst),	\
+	BUILD_ASSERT((KVS_DEVOFF(inst) + KVS_SIZE(inst)) <= KVS_DEVSIZE(inst),	\
 		     "Bad eeprom-offset and size combination, please review")
 #define KVS_CHECK_BLSIZE(inst)							\
-	BUILD_ASSERT((KVS_SSIZE(inst) & (KVS_SSIZE(inst) - 1)) == 0,		\
+	BUILD_ASSERT((KVS_BLSIZE(inst) & (KVS_BLSIZE(inst) - 1)) == 0,		\
 		     "Block size not a power of 2")
 #define KVS_CHECK_SCNT(inst)							\
-	BUILD_ASSERT((KVS_SIZE(inst) % KVS_SSIZE(inst)) == 0,			\
+	BUILD_ASSERT((KVS_SIZE(inst) % KVS_BLSIZE(inst)) == 0,			\
 		     "Partition size not a multiple of block size")
 
 #define KVS_EEPROM_DEFINE(inst)							\
 	KVS_CHECK_DEVSIZE(inst);						\
 	KVS_CHECK_BLSIZE(inst);							\
 	KVS_CHECK_SCNT(inst);							\
+	KVS_SEM_DEFINE(inst);							\
 	struct kvs_be_eeprom kvs_be_eeprom_##inst = {				\
 		.dev = KVS_DEV(inst),						\
 		.off = KVS_DEVOFF(inst),					\
 		.size = KVS_SIZE(inst),						\
+		.sem = KVS_SEM_GET(inst),					\
 	};									\
 	const char kvs_eeprom_cookie_##inst[] = "Zephyr-KVS";			\
 	DEFINE_KVS(								\
 		inst, &kvs_be_eeprom_##inst, KVS_BLSIZE(inst), KVS_BCNT(inst),	\
 		1, NULL, 1, kvs_be_eeprom_read, kvs_be_eeprom_prog, 		\
-		kvs_eeprom_be_comp, kvs_eeprom_be_sync,	kvs_be_eeprom_be_init,	\
-		kvs_be_eeprom_release, kvs_be_eeprom_be_lock,			\
+		kvs_be_eeprom_comp, kvs_be_eeprom_sync,	kvs_be_eeprom_init,	\
+		kvs_be_eeprom_release, kvs_be_eeprom_lock,			\
 		kvs_be_eeprom_unlock, (void *)&kvs_eeprom_cookie_##inst,	\
 		sizeof(kvs_eeprom_cookie_##inst) - 1				\
 	);

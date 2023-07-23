@@ -1,0 +1,12 @@
+/*
+ * Copyright (c) 2023 Laczen
+ * SPDX-License-Identifier: Apache-2.0
+ */
+ 
+ / {
+        kvs_storage: kvs_storage {
+                compatible = "zephyr,kvs-eeprom";
+                eeprom = <&eeprom0>;
+                block-size = <512>;
+        };
+ };
