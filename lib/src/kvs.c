@@ -409,16 +409,21 @@ static int entry_set_info(struct kvs_ent *ent, uint8_t *hdr, uint8_t key_len,
 	return 0;
 }
 
-static uint32_t block_advance(const struct kvs *kvs, uint32_t pos)
+static uint32_t block_advance_n(const struct kvs *kvs, uint32_t pos, uint32_t n)
 {
 	const size_t bsz = kvs->cfg->bsz;
-	const uint32_t end = bsz * (kvs->cfg->bcnt - 1);
+	const uint32_t end = bsz * kvs->cfg->bcnt;
 
-	if (pos > end) {
-		return pos - end;
+	for (uint32_t i = 0; i < n; i++) {
+		if (pos >= end) {
+			pos -= end;
+		}
+
+		pos +=bsz;
+
 	}
 	
-	return pos + bsz;
+	return pos;
 }
 
 static void wblock_advance(const struct kvs *kvs)
@@ -426,7 +431,7 @@ static void wblock_advance(const struct kvs *kvs)
 	const size_t bsz = kvs->cfg->bsz;
 	struct kvs_data *data = kvs->data;
 
-	data->bend = block_advance(kvs, data->bend);
+	data->bend = block_advance_n(kvs, data->bend, 1);
 	data->pos = data->bend - bsz;
 	if (data->pos == 0U) {
 		data->wrapcnt++;
@@ -881,20 +886,13 @@ static int compact(const struct kvs *kvs, uint32_t stop)
 	const struct entry_cb compact_cb = {
 		.cb = copy_cb,
 	};
-
-	uint32_t start = kvs->data->bend;
-	for (uint32_t i = 0; i < kvs->cfg->bspr; i++) {
-		start = block_advance(kvs, start);
-	}
-	
-	wblock_advance(kvs);
-
-	struct kvs_ent wlk = {
+		struct kvs_ent wlk = {
 		.kvs = (struct kvs *)kvs,
-		.next = start,
+		.next = block_advance_n(kvs, kvs->data->bend, kvs->cfg->bspr),
 	};
 	int rc;
 
+	wblock_advance(kvs);
 	rc = walk_unique(&wlk, &rdkey, &compact_cb, stop);
 
 	return rc == KVS_DONE ? 0 : rc;
@@ -992,11 +990,8 @@ int kvs_write(const struct kvs *kvs, const char *key, const void *value,
 			goto end;
 		}
 
-		uint32_t stop = kvs->data->bend;
-		for (uint32_t i = 0; i < (kvs->cfg->bspr + 1); i++) {
-			stop = block_advance(kvs, stop);
-		}
-		
+		uint32_t stop = block_advance_n(kvs, kvs->data->bend, 
+						kvs->cfg->bspr + 1);
 		rc = compact(kvs, stop);
 		cnt--;
 	}
@@ -1029,15 +1024,9 @@ int kvs_walk_unique(const struct kvs *kvs, const char *key,
 		.cb = cb,
 		.cb_arg = cb_arg,
 	};
-
-	uint32_t start = kvs->data->bend;
-	for (uint32_t i = 0; i < kvs->cfg->bspr; i++) {
-		start = block_advance(kvs, start);
-	}
-	
 	struct kvs_ent wlk = {
 		.kvs = (struct kvs *)kvs,
-		.next = start,
+		.next = block_advance_n(kvs, kvs->data->bend, kvs->cfg->bspr),
 	};
 
 	return walk_unique(&wlk, &rdkey, &unique_cb, kvs->data->pos);
@@ -1060,15 +1049,9 @@ int kvs_walk(const struct kvs *kvs, const char *key,
 		.cb = cb,
 		.cb_arg = cb_arg,
 	};
-
-	uint32_t start = kvs->data->bend;
-	for (uint32_t i = 0; i < kvs->cfg->bspr; i++) {
-		start = block_advance(kvs, start);
-	}
-	
 	struct kvs_ent wlk = {
 		.kvs = (struct kvs *)kvs,
-		.next = start,
+		.next = block_advance_n(kvs, kvs->data->bend, kvs->cfg->bspr),
 	};
 
 	return walk(&wlk, &rdkey, &entry_cb, kvs->data->pos);
@@ -1126,11 +1109,8 @@ int recover(const struct kvs *kvs)
 		.kvs = (struct kvs *)kvs,
 		.next = kvs->data->bend,
 	};
-	uint32_t stop = kvs->data->bend;
+	uint32_t stop = block_advance_n(kvs, kvs->data->bend, kvs->cfg->bspr);
 
-	for (uint32_t i = 0; i < kvs->cfg->bspr; i++) {
-		stop = block_advance(kvs, stop);
-	}
 	(void)walk_unique(&wlk, &rdkey, &recover_cb, stop);
 	if (!recover) {
 		goto end;
