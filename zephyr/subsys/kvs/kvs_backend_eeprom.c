@@ -117,13 +117,12 @@ end:
 static int kvs_be_eeprom_lock(const void *ctx)
 {
 	const struct kvs_be_eeprom *be = (const struct kvs_be_eeprom *)ctx;
-	int rc = 0;
-	
+
 	if (IS_ENABLED(CONFIG_MULTITHREADING)) {
-		rc = k_sem_take(be->sem, K_FOREVER);
+		return k_sem_take(be->sem, K_FOREVER);
 	}
-	
-	return rc;
+
+	return 0;
 }
 
 static int kvs_be_eeprom_unlock(const void *ctx)
@@ -133,21 +132,14 @@ static int kvs_be_eeprom_unlock(const void *ctx)
 	if (IS_ENABLED(CONFIG_MULTITHREADING)) {
 		k_sem_give(be->sem);
 	}
-
+	
 	return 0;
 }
 
 static int kvs_be_eeprom_init(const void *ctx)
 {
-	const struct kvs_be_eeprom *be = (const struct kvs_be_eeprom *)ctx;
-	int rc = 0;
-
-	if (IS_ENABLED(CONFIG_MULTITHREADING)) {
-		k_sem_init(be->sem, 1, 1);
-	}
-
-	LOG_DBG("backend init [%d]", rc);
-	return rc;
+	LOG_DBG("backend init [%d]", 0);
+	return 0;
 }
 
 static int kvs_be_eeprom_release(const void *ctx)
@@ -163,10 +155,6 @@ static int kvs_be_eeprom_release(const void *ctx)
 	(DT_PROP(inst, size)), (KVS_MAXSIZE(inst)))
 #define KVS_BLSIZE(inst) (DT_PROP(inst, block_size))
 #define KVS_BCNT(inst) KVS_SIZE(inst)/KVS_BLSIZE(inst)
-#define KVS_SEM_DEFINE(inst) COND_CODE_1(CONFIG_MULTITHREADING, 		\
-	(struct k_sem kvs_eeprom_sem_##inst),())
-#define KVS_SEM_GET(inst) COND_CODE_1(CONFIG_MULTITHREADING,			\
-	(&kvs_eeprom_sem_##inst), (NULL))
 
 #define KVS_CHECK_DEVSIZE(inst)							\
 	BUILD_ASSERT((KVS_DEVOFF(inst) + KVS_SIZE(inst)) <= KVS_DEVSIZE(inst),	\
@@ -182,21 +170,21 @@ static int kvs_be_eeprom_release(const void *ctx)
 	KVS_CHECK_DEVSIZE(inst);						\
 	KVS_CHECK_BLSIZE(inst);							\
 	KVS_CHECK_SCNT(inst);							\
-	KVS_SEM_DEFINE(inst);							\
-	struct kvs_be_eeprom kvs_be_eeprom_##inst = {				\
+	K_SEM_DEFINE(kvs_be_eeprom_sem_##inst, 1, 1);				\
+	const struct kvs_be_eeprom kvs_be_eeprom_##inst = {			\
 		.dev = KVS_DEV(inst),						\
 		.off = KVS_DEVOFF(inst),					\
 		.size = KVS_SIZE(inst),						\
-		.sem = KVS_SEM_GET(inst),					\
+		.sem = &kvs_be_eeprom_sem_##inst,				\
 	};									\
-	const char kvs_eeprom_cookie_##inst[] = "Zephyr-KVS";			\
+	const char kvs_be_eeprom_cookie_##inst[] = "Zephyr-KVS";		\
 	DEFINE_KVS(								\
 		inst, &kvs_be_eeprom_##inst, KVS_BLSIZE(inst), KVS_BCNT(inst),	\
 		1, NULL, 1, kvs_be_eeprom_read, kvs_be_eeprom_prog, 		\
 		kvs_be_eeprom_comp, kvs_be_eeprom_sync,	kvs_be_eeprom_init,	\
 		kvs_be_eeprom_release, kvs_be_eeprom_lock,			\
-		kvs_be_eeprom_unlock, (void *)&kvs_eeprom_cookie_##inst,	\
-		sizeof(kvs_eeprom_cookie_##inst) - 1				\
+		kvs_be_eeprom_unlock, (void *)&kvs_be_eeprom_cookie_##inst,	\
+		sizeof(kvs_be_eeprom_cookie_##inst) - 1				\
 	);
 	
 DT_FOREACH_STATUS_OKAY(zephyr_kvs_eeprom, KVS_EEPROM_DEFINE)
