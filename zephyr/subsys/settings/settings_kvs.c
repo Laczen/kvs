@@ -83,8 +83,9 @@ static int settings_kvs_load(struct settings_store *cs,
 {
 	struct settings_kvs *cf = CONTAINER_OF(cs, struct settings_kvs,
                                                cf_store);
+	const char *subtree = (arg->subtree == NULL) ? "" : arg->subtree;
 
-        return kvs_walk_unique(cf->cf_kvs, "", kvs_load_cb, (void *)arg);
+        return kvs_walk_unique(cf->cf_kvs, subtree, kvs_load_cb, (void *)arg);
 }
 
 static int settings_kvs_save(struct settings_store *cs, const char *name,
