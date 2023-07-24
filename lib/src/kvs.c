@@ -307,7 +307,7 @@ static int entry_get_param(struct kvs_ent *ent, const uint8_t *hdr)
 	next += entry_get_klen(ent) + entry_get_vlen(ent);
 	next = KVS_ALIGNDOWN(next, psz) + psz;
 
-	if (next > ent->next) {
+	if ((next > ent->next) || (next < ent->start)) {
 		rc = -KVS_EINVAL;
 		goto end;
 	}
@@ -1107,7 +1107,8 @@ int recover(const struct kvs *kvs)
 	};
 	struct kvs_ent wlk = {
 		.kvs = (struct kvs *)kvs,
-		.next = kvs->data->bend,
+		.next = block_advance_n(kvs, kvs->data->bend, 
+					kvs->cfg->bspr - 1),
 	};
 	uint32_t stop = block_advance_n(kvs, kvs->data->bend, kvs->cfg->bspr);
 
@@ -1116,14 +1117,8 @@ int recover(const struct kvs *kvs)
 		goto end;
 	}
 
-	if (cfg->bspr == 1U) {
-		/* if there is only one free block reuse the bad sector
-		 * in the next compact command the position will be advanced
-		 * to bend and bend accordingly, so we can just set bend to
-		 * the start of the sector
-		 */
-		kvs->data->bend = KVS_ALIGNDOWN(kvs->data->pos, cfg->bsz);
-	}
+	/* set back data->bend to the start of the sector */
+	kvs->data->bend = KVS_ALIGNDOWN(kvs->data->pos, cfg->bsz);
 
 	return compact(kvs, kvs->data->bend);
 end:
