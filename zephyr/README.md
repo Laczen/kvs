@@ -31,6 +31,6 @@ manifest:
 ```
 
 After the project has been added calling `west update` ads the kvs directory to
-the zephyr workspace. If your workspace is called `zephyr_project` Examples can 
+the zephyr workspace. If your workspace is called `zephyr_project` examples can 
 be found under `zephyr_project/kvs/zephyr/samples`and tests under
 `zephyr_project/kvs/zephyr/tests`.`
