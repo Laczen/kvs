@@ -31,7 +31,7 @@ wrap counter is increased each time the memory wraps around. The use of the
 cookie is left up to the user, it could e.g. by used as means to identify the
 key value store or its version.
 
-When a new block is strated the key value store verifies whether it needs to
+When a new block is started the key value store verifies whether it needs to
 move old entries to keep a copy and does so if required.
 
  The configurable block size needs to be a power of 2. The block size limits
