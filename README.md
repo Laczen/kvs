@@ -38,7 +38,7 @@ move old entries to keep a copy and does so if required.
  the maximum size of an entry as it needs to fit within one block. The block
  size is not limited to an erase block size of the memory device, this allows
  using memory devices with non constant erase block sizes. However in this
- last case carefull parameter selection is required to guarantee that there
+ last case careful parameter selection is required to guarantee that there
  will be no loss of data.
 
  ## documentation
