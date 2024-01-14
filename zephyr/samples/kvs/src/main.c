@@ -31,6 +31,7 @@ int main(void)
 	rc = kvs_read(kvs_store, "test", (void *)&data, sizeof(data));
 	LOG_INF("kvs_read [%s]", rc == 0 ? "OK" : "Failed");
 	LOG_INF("data: %d", data);
+	LOG_INF("DONE");
 
 	return 0;
 }
